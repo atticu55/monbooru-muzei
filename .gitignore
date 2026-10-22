@@ -3,3 +3,5 @@ build/
 local.properties
 *.log
 *.keystore
+serve/
+build-*.log
