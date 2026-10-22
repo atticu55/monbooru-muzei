@@ -11,7 +11,7 @@ docker pull -q mobiledevops/android-sdk-image || { note "FAILED at docker pull s
 
 echo "=== [$(date)] installing SDK pieces into volume ==="
 docker run --rm -v android-sdk-vol:/opt/android-sdk mobiledevops/android-sdk-image \
-  bash -c 'yes | sdkmanager --licenses >/dev/null 2>&1; sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null && echo SDK_OK' \
+  bash -c 'yes | sdkmanager --licenses >/dev/null 2>&1; sdkmanager "platforms;android-35" "build-tools;35.0.0" "build-tools;34.0.0" >/dev/null && echo SDK_OK' \
   || { note "FAILED at sdkmanager install"; exit 1; }
 
 echo "=== [$(date)] pulling gradle image ==="
@@ -22,7 +22,7 @@ docker run --rm \
   -v android-sdk-vol:/opt/android-sdk \
   -v "$(pwd)":/project -w /project \
   -v gradle-cache-vol:/home/gradle/.gradle \
-  -e ANDROID_HOME=/opt/android-sdk -e ANDROID_SDK_ROOT=/opt/android-sdk \
+  -e ANDROID_HOME=/opt/android-sdk -e ANDROID_SDK_ROOT=/opt/android-sdk -e GRADLE_USER_HOME=/home/gradle/.gradle -u 0:0 \
   gradle:8.12-jdk17 gradle --no-daemon assembleDebug
 rc=$?
 
