@@ -1,9 +1,9 @@
 package boo.komori.wallpaper
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
 import androidx.work.BackoffPolicy
@@ -18,7 +18,8 @@ import com.google.android.apps.muzei.api.provider.Artwork
 import com.google.android.apps.muzei.api.provider.ProviderContract
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -27,14 +28,18 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
     companion object {
         private const val TAG = "WallpaperWorker"
         const val AUTHORITY = "boo.komori.wallpaper"
-        const val PREF_BASE_URL = "baseUrl"
-        const val PREF_FOLDER = "folder"
+        const val FILE_PROVIDER_AUTHORITY = "boo.komori.wallpaper.fileprovider"
+        const val PREF_SERVER_URL = "serverUrl"
+        const val PREF_API_TOKEN = "apiToken"
+        const val PREF_COLLECTION = "collection"
         const val PREF_ONLY_WIFI = "onlyWifi"
         const val PREF_REQUIRES_CHARGING = "requiresCharging"
         const val PREF_BATTERY_NOT_LOW = "batteryNotLow"
-        const val PREF_KNOWN_FOLDERS = "knownFolders"
 
-        private val http = OkHttpClient()
+        private val http = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
 
         internal fun enqueueLoad(context: Context, ignoreRequirements: Boolean = false) {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
@@ -63,65 +68,119 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
 
     override fun doWork(): Result {
         val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
-        val base = prefs.getString(PREF_BASE_URL, null)
+        val server = prefs.getString(PREF_SERVER_URL, null)
             ?.trim()?.trimEnd('/')
             ?.takeIf { it.startsWith("http") }
             ?: run {
-                Log.w(TAG, "Base URL not configured")
+                Log.w(TAG, "Server URL not configured")
                 return Result.failure()
             }
 
-        // keep the folder picker's cache fresh (non-fatal)
-        try {
-            val names = mutableSetOf<String>()
-            val manifest = JSONArray(fetch("$base/manifest.json"))
-            for (i in 0 until manifest.length()) {
-                manifest.getJSONObject(i).optString("name").takeIf { it.isNotBlank() }?.let { names.add(it) }
-            }
-            if (names.isNotEmpty()) prefs.edit().putStringSet(PREF_KNOWN_FOLDERS, names).apply()
-        } catch (e: Exception) {
-            Log.w(TAG, "Manifest refresh failed (non-fatal)", e)
-        }
-
-        val folder = prefs.getString(PREF_FOLDER, null)?.trim()?.takeIf { it.isNotBlank() }
+        val token = prefs.getString(PREF_API_TOKEN, null)
+            ?.trim()?.takeIf { it.isNotBlank() }
             ?: run {
-                Log.w(TAG, "No folder selected")
+                Log.w(TAG, "API token not configured")
                 return Result.failure()
             }
 
-        val index = try {
-            JSONArray(fetch("$base/${Uri.encode(folder)}/index.json"))
+        val collection = prefs.getString(PREF_COLLECTION, null)
+            ?.trim()?.takeIf { it.isNotBlank() }
+            ?: run {
+                Log.w(TAG, "No collection selected")
+                return Result.failure()
+            }
+
+        // Search for images in the collection
+        val searchUrl = "$server/api/v1/images/search?q=collection:${Uri.encode(collection)}&sort=newest&limit=200"
+        val response = try {
+            fetchJson(searchUrl, token)
         } catch (e: IOException) {
-            Log.w(TAG, "Folder index fetch failed", e)
+            Log.w(TAG, "Search fetch failed", e)
             return Result.retry()
         }
 
-        val artworks = ArrayList<Artwork>(index.length())
-        for (i in 0 until index.length()) {
-            val o = index.getJSONObject(i)
-            val downloadUrl = o.optString("downloadUrl", o.optString("url"))
-            if (downloadUrl.isBlank()) continue
-            artworks += Artwork.Builder()
-                .token(o.optString("id", o.optString("name", downloadUrl)))
-                .title(o.optString("name", "Untitled"))
-                .byline(o.optString("artist", folder))
-                .persistentUri(downloadUrl.toUri())
-                .webUri(o.optString("url", downloadUrl).toUri())
-                .build()
-        }
-        if (artworks.isEmpty()) {
-            Log.w(TAG, "Empty index for folder $folder")
+        val images = response.optJSONArray("images") ?: run {
+            Log.w(TAG, "No images array in response")
             return Result.failure()
         }
 
+        if (images.length() == 0) {
+            Log.w(TAG, "Collection '$collection' is empty")
+            return Result.failure()
+        }
+
+        // Clean up old cached files
+        val cacheDir = applicationContext.cacheDir
+        cacheDir.listFiles()?.filter { it.name.startsWith("wallpaper_") }?.forEach { it.delete() }
+
+        val artworks = ArrayList<Artwork>(images.length())
+        for (i in 0 until images.length()) {
+            val img = images.getJSONObject(i)
+            val id = img.optInt("id", -1)
+            if (id == -1) continue
+
+            val fileType = img.optString("file_type", "jpg")
+            val source = img.optString("source", "")
+            val imgUrl = img.optString("url", "")
+
+            // Download the actual image file
+            val downloadUrl = "$server/api/v1/images/$id/file"
+            val cachedFile = File(cacheDir, "wallpaper_${id}.${fileType}")
+            try {
+                downloadFile(downloadUrl, token, cachedFile)
+            } catch (e: IOException) {
+                Log.w(TAG, "Image download failed for id=$id", e)
+                continue
+            }
+
+            // Create FileProvider URI for the cached file
+            val fileUri = FileProvider.getUriForFile(applicationContext, FILE_PROVIDER_AUTHORITY, cachedFile)
+
+            val title = if (source.isNotBlank()) source else "Wallpaper $id"
+            val webUri = if (imgUrl.isNotBlank()) imgUrl.toUri() else null
+
+            val builder = Artwork.Builder()
+                .token(id.toString())
+                .title(title)
+                .byline(collection)
+                .persistentUri(fileUri)
+
+            if (webUri != null) builder.webUri(webUri)
+
+            artworks += builder.build()
+        }
+
+        if (artworks.isEmpty()) {
+            Log.w(TAG, "No images could be downloaded from collection '$collection'")
+            return Result.retry()
+        }
+
         ProviderContract.getProviderClient(applicationContext, AUTHORITY).setArtwork(artworks)
+        Log.i(TAG, "Loaded ${artworks.size} wallpapers from collection '$collection'")
         return Result.success()
     }
 
-    private fun fetch(url: String): String = http.newCall(
-        Request.Builder().url(url).build()
-    ).execute().use { resp ->
-        if (!resp.isSuccessful) throw IOException("HTTP ${resp.code} for $url")
-        resp.body?.string() ?: throw IOException("Empty body from $url")
+    private fun fetchJson(url: String, token: String): JSONObject {
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .build()
+        return http.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code} for $url")
+            val body = resp.body?.string() ?: throw IOException("Empty body from $url")
+            JSONObject(body)
+        }
+    }
+
+    private fun downloadFile(url: String, token: String, dest: File) {
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .build()
+        http.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code} for $url")
+            val body = resp.body ?: throw IOException("Empty body from $url")
+            dest.outputStream().use { out -> body.byteStream().copyTo(out) }
+        }
     }
 }

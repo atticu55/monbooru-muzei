@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Komori Wallpapers</string>
-    <string name="provider_description">Wallpapers served from your NAS folders</string>
+    <string name="app_name">Monbooru Wallpapers</string>
+    <string name="provider_description">Wallpapers from your Monbooru collection</string>
 </resources>

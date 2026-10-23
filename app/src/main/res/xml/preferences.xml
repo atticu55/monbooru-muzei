@@ -4,17 +4,25 @@
     <PreferenceCategory app:title="Server" app:iconSpaceReserved="false">
 
         <EditTextPreference
-            app:key="baseUrl"
-            app:title="Wallpaper server URL"
+            app:key="serverUrl"
+            app:title="Monbooru server URL"
             app:useSimpleSummaryProvider="true"
             app:iconSpaceReserved="false"
-            app:dialogTitle="Wallpaper server URL" />
+            app:dialogTitle="Monbooru server URL" />
 
-        <ListPreference
-            app:key="folder"
-            app:title="Folder"
+        <EditTextPreference
+            app:key="apiToken"
+            app:title="API token"
+            app:summary="Bearer token from Monbooru Settings"
+            app:iconSpaceReserved="false"
+            app:dialogTitle="API token" />
+
+        <EditTextPreference
+            app:key="collection"
+            app:title="Collection"
             app:useSimpleSummaryProvider="true"
-            app:iconSpaceReserved="false" />
+            app:iconSpaceReserved="false"
+            app:dialogTitle="Collection name" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Refresh conditions" app:iconSpaceReserved="false">
