@@ -7,16 +7,31 @@ android {
     namespace 'boo.komori.wallpaper'
     compileSdk 35
 
+    signingConfigs {
+        // Persistent signing identity: one key across every build so new
+        // versions install over old ones and Muzei keeps its selection.
+        komori {
+            storeFile rootProject.file('komori-debug.keystore')
+            storePassword 'komori-wallpaper'
+            keyAlias 'komori'
+            keyPassword 'komori-wallpaper'
+        }
+    }
+
     defaultConfig {
         applicationId "boo.komori.wallpaper"
         minSdk 29
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.komori
+        }
         release {
+            signingConfig signingConfigs.komori
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

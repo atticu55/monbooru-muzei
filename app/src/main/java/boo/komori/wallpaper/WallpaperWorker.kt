@@ -74,14 +74,27 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
         val server = prefs.getString(PREF_SERVER_URL, null)
             ?.trim()?.trimEnd('/')
             ?.takeIf { it.startsWith("http") }
-            ?: run { Log.w(TAG, "Server URL not configured"); return Result.failure() }
+            ?: run {
+                Log.w(TAG, "Server URL not configured")
+                SyncStatus.mark(applicationContext, "error", "server URL not set")
+                return Result.failure()
+            }
 
         val token = TokenStore.getToken(applicationContext)
-            ?: run { Log.w(TAG, "API token not configured"); return Result.failure() }
+            ?: run {
+                Log.w(TAG, "API token not configured")
+                SyncStatus.mark(applicationContext, "error", "API token not set")
+                return Result.failure()
+            }
 
         val collection = prefs.getString(PREF_COLLECTION, null)
             ?.trim()?.takeIf { it.isNotBlank() }
-            ?: run { Log.w(TAG, "No collection selected"); return Result.failure() }
+            ?: run {
+                Log.w(TAG, "No collection selected")
+                SyncStatus.mark(applicationContext, "error", "no collection chosen")
+                return Result.failure()
+            }
+        SyncStatus.mark(applicationContext, "running", "")
 
         // collection:"name" is an exact match; sort=order returns the
         // collection in its own order (falls back to id order when unset).
@@ -128,15 +141,23 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
             }
         } catch (e: IOException) {
             Log.w(TAG, "Sync failed", e)
-            return if (artworks.isEmpty()) Result.retry() else { publish(artworks); Result.success() }
+            if (artworks.isEmpty()) {
+                SyncStatus.mark(applicationContext, "error", "search/download failed: ${e.message}")
+                return Result.retry()
+            }
+            publish(artworks)
+            SyncStatus.mark(applicationContext, "ok", "${artworks.size} of $total (partial: ${e.message})")
+            return Result.success()
         }
 
         if (artworks.isEmpty()) {
             Log.w(TAG, "Collection '$collection' is empty or had no downloadable images")
+            SyncStatus.mark(applicationContext, "error", "no usable images in '$collection' (are they all videos/archives?)")
             return Result.failure()
         }
 
         publish(artworks)
+        SyncStatus.mark(applicationContext, "ok", "$total images loaded")
         Log.i(TAG, "Loaded ${artworks.size} of $total wallpapers from '$collection'")
         return Result.success()
     }

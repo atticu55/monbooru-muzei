@@ -81,6 +81,16 @@ class SettingsActivity : AppCompatActivity() {
                 setOnBindEditTextListener { it.inputType = InputType.TYPE_CLASS_TEXT }
             }
 
+            findPreference<Preference>("syncStatus")?.apply {
+                summary = SyncStatus.read(requireContext())
+            }
+
+            findPreference<Preference>("syncNow")?.setOnPreferenceClickListener {
+                WallpaperWorker.enqueueLoad(requireContext(), ignoreRequirements = true)
+                Toast.makeText(requireContext(), "Sync started", Toast.LENGTH_SHORT).show()
+                true
+            }
+
             findPreference<Preference>("collectionPicker")?.apply {
                 val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
                 summary = prefs.getString(WallpaperWorker.PREF_COLLECTION, null)
@@ -146,13 +156,28 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // Polls the sync status once a second while settings is on screen,
+        // so "Syncing…" flips to the result without leaving the screen.
+        private val statusTick = object : Runnable {
+            override fun run() {
+                if (!isAdded) return
+                findPreference<Preference>("syncStatus")?.let { p ->
+                    val text = SyncStatus.read(requireContext())
+                    if (p.summary != text) p.summary = text
+                }
+                view?.postDelayed(this, 1000)
+            }
+        }
+
         override fun onResume() {
             super.onResume()
             PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .registerOnSharedPreferenceChangeListener(prefListener)
+            statusTick.run()
         }
 
         override fun onPause() {
+            view?.removeCallbacks(statusTick)
             PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .unregisterOnSharedPreferenceChangeListener(prefListener)
             super.onPause()
