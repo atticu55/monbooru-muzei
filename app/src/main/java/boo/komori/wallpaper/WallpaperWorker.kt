@@ -76,8 +76,7 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
                 return Result.failure()
             }
 
-        val token = prefs.getString(PREF_API_TOKEN, null)
-            ?.trim()?.takeIf { it.isNotBlank() }
+        val token = TokenStore.getToken(applicationContext)
             ?: run {
                 Log.w(TAG, "API token not configured")
                 return Result.failure()
