@@ -16,10 +16,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.google.android.apps.muzei.api.provider.Artwork
 import com.google.android.apps.muzei.api.provider.ProviderContract
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -36,18 +33,6 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
         const val PREF_ONLY_WIFI = "onlyWifi"
         const val PREF_REQUIRES_CHARGING = "requiresCharging"
         const val PREF_BATTERY_NOT_LOW = "batteryNotLow"
-
-        private val http = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        private fun extensionForFileType(fileType: String): String? = when (fileType.lowercase()) {
-            "jpeg" -> "jpg"
-            "png", "webp", "gif", "avif", "jxl" -> fileType.lowercase()
-            // Videos and archives can't be wallpapers
-            else -> null
-        }
 
         internal fun enqueueLoad(context: Context, ignoreRequirements: Boolean = false) {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
@@ -74,125 +59,92 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
         }
     }
 
+    /** Search response shape per monbooru's OpenAPI: {page, limit, total, results}. */
+    private data class Page(val results: JSONArray, val total: Int)
+
+    private fun fetchSearchPage(server: String, token: String, query: String, page: Int): Page {
+        val body = MonbooruApi.search(server, token, query, "order", page)
+        val results = body.optJSONArray("results")
+            ?: throw IOException("Search response missing results array")
+        return Page(results, body.optInt("total", 0))
+    }
+
     override fun doWork(): Result {
         val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
         val server = prefs.getString(PREF_SERVER_URL, null)
             ?.trim()?.trimEnd('/')
             ?.takeIf { it.startsWith("http") }
-            ?: run {
-                Log.w(TAG, "Server URL not configured")
-                return Result.failure()
-            }
+            ?: run { Log.w(TAG, "Server URL not configured"); return Result.failure() }
 
         val token = TokenStore.getToken(applicationContext)
-            ?: run {
-                Log.w(TAG, "API token not configured")
-                return Result.failure()
-            }
+            ?: run { Log.w(TAG, "API token not configured"); return Result.failure() }
 
         val collection = prefs.getString(PREF_COLLECTION, null)
             ?.trim()?.takeIf { it.isNotBlank() }
-            ?: run {
-                Log.w(TAG, "No collection selected")
-                return Result.failure()
-            }
+            ?: run { Log.w(TAG, "No collection selected"); return Result.failure() }
 
-        // Search images in the collection. Real response shape (monbooru OpenAPI):
-        // {"page":..,"limit":..,"total":..,"results":[{id, file_type, source, url, ...}]}
-        // collection:"name" is an exact match on the collection label; sort=order
-        // returns the collection in its own order.
+        // collection:"name" is an exact match; sort=order returns the
+        // collection in its own order (falls back to id order when unset).
         val query = "collection:\"$collection\""
-        val searchUrl = "$server/api/v1/images/search?q=${Uri.encode(query)}&sort=order&limit=200"
-        val response = try {
-            fetchJson(searchUrl, token)
-        } catch (e: IOException) {
-            Log.w(TAG, "Search fetch failed", e)
-            return Result.retry()
-        }
-
-        val images: JSONArray = response.optJSONArray("results") ?: run {
-            Log.w(TAG, "No results array in response: $response")
-            return Result.failure()
-        }
-
-        if (images.length() == 0) {
-            Log.w(TAG, "Collection '$collection' is empty")
-            return Result.failure()
-        }
-
-        // Clean up old cached files
         val cacheDir = applicationContext.cacheDir
-        cacheDir.listFiles()?.filter { it.name.startsWith("wallpaper_") }?.forEach { it.delete() }
 
-        val artworks = ArrayList<Artwork>(images.length())
-        for (i in 0 until images.length()) {
-            val img = images.getJSONObject(i)
-            val id = img.optInt("id", -1)
-            if (id == -1) continue
+        val artworks = ArrayList<Artwork>()
+        var page = 1
+        var total = 0
+        try {
+            while (page <= 50) { // hard cap: 50 * 200 = 10k images
+                val p = fetchSearchPage(server, token, query, page)
+                total = p.total
+                if (p.results.length() == 0) break
+                for (i in 0 until p.results.length()) {
+                    val img = p.results.getJSONObject(i)
+                    val id = img.optLong("id", -1)
+                    if (id == -1L) continue
 
-            val fileType = img.optString("file_type", "")
-            val ext = extensionForFileType(fileType) ?: continue
-            val source = img.optString("source", "")
-            val imgUrl = img.optString("url", "")
+                    // Wallpapers only: skip videos (mp4/webm) and archives.
+                    val ext = when (img.optString("file_type", "").lowercase()) {
+                        "jpeg" -> "jpg"
+                        "png", "webp", "gif", "avif", "jxl" -> img.optString("file_type").lowercase()
+                        else -> null
+                    } ?: continue
 
-            // Download the actual image file
-            val downloadUrl = "$server/api/v1/images/$id/file"
-            val cachedFile = File(cacheDir, "wallpaper_${id}.${ext}")
-            try {
-                downloadFile(downloadUrl, token, cachedFile)
-            } catch (e: IOException) {
-                Log.w(TAG, "Image download failed for id=$id", e)
-                continue
+                    val cachedFile = File(cacheDir, "wallpaper_$id.$ext")
+                    MonbooruApi.downloadImage(server, token, id, cachedFile)
+                    val fileUri = FileProvider.getUriForFile(
+                        applicationContext, FILE_PROVIDER_AUTHORITY, cachedFile
+                    )
+
+                    val source = img.optString("source", "")
+                    val builder = Artwork.Builder()
+                        .token(id.toString())
+                        .title(if (source.isNotBlank()) source else "Wallpaper $id")
+                        .byline(collection)
+                        .persistentUri(fileUri)
+                    img.optString("url", "").takeIf { it.isNotBlank() }?.let { builder.webUri(it.toUri()) }
+                    artworks += builder.build()
+                }
+                page++
+                if ((page - 1) * MonbooruApi.PAGE_LIMIT >= total) break
             }
-
-            // Create FileProvider URI for the cached file
-            val fileUri = FileProvider.getUriForFile(applicationContext, FILE_PROVIDER_AUTHORITY, cachedFile)
-
-            val title = if (source.isNotBlank()) source else "Wallpaper $id"
-            val webUri = if (imgUrl.isNotBlank()) imgUrl.toUri() else null
-
-            val builder = Artwork.Builder()
-                .token(id.toString())
-                .title(title)
-                .byline(collection)
-                .persistentUri(fileUri)
-
-            if (webUri != null) builder.webUri(webUri)
-
-            artworks += builder.build()
+        } catch (e: IOException) {
+            Log.w(TAG, "Sync failed", e)
+            return if (artworks.isEmpty()) Result.retry() else { publish(artworks); Result.success() }
         }
 
         if (artworks.isEmpty()) {
-            Log.w(TAG, "No images could be downloaded from collection '$collection'")
-            return Result.retry()
+            Log.w(TAG, "Collection '$collection' is empty or had no downloadable images")
+            return Result.failure()
         }
 
-        ProviderContract.getProviderClient(applicationContext, AUTHORITY).setArtwork(artworks)
-        Log.i(TAG, "Loaded ${artworks.size} wallpapers from collection '$collection'")
+        publish(artworks)
+        Log.i(TAG, "Loaded ${artworks.size} of $total wallpapers from '$collection'")
         return Result.success()
     }
 
-    private fun fetchJson(url: String, token: String): JSONObject {
-        val request = Request.Builder()
-            .url(url)
-            .header("Authorization", "Bearer $token")
-            .build()
-        return http.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code} for $url")
-            val body = resp.body?.string() ?: throw IOException("Empty body from $url")
-            JSONObject(body)
-        }
-    }
-
-    private fun downloadFile(url: String, token: String, dest: File) {
-        val request = Request.Builder()
-            .url(url)
-            .header("Authorization", "Bearer $token")
-            .build()
-        http.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code} for $url")
-            val body = resp.body ?: throw IOException("Empty body from $url")
-            dest.outputStream().use { out -> body.byteStream().copyTo(out) }
-        }
+    private fun publish(artworks: List<Artwork>) {
+        val cacheDir = applicationContext.cacheDir
+        val keep = artworks.mapNotNull { it.persistentUri?.lastPathSegment?.substringAfterLast('/') }.toSet()
+        cacheDir.listFiles()?.filter { it.name.startsWith("wallpaper_") && it.name !in keep }?.forEach { it.delete() }
+        ProviderContract.getProviderClient(applicationContext, AUTHORITY).setArtwork(artworks)
     }
 }

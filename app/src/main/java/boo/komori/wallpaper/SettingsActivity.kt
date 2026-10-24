@@ -1,14 +1,26 @@
 package boo.komori.wallpaper
 
+import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.text.InputType
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.preference.EditTextPreference
+import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-private const val MASKED_TOKEN = "********"
+private const val MASKED_TOKEN = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,23 +65,83 @@ class SettingsActivity : AppCompatActivity() {
             findPreference<EditTextPreference>(WallpaperWorker.PREF_API_TOKEN)?.apply {
                 setOnBindEditTextListener {
                     it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    // Always open the dialog with an empty field: the stored
-                    // token never appears on screen, and a cancelled dialog
-                    // leaves the saved token untouched.
+                    // Always open empty: the stored token never appears on
+                    // screen, and a cancelled dialog leaves it untouched.
                     it.setText("")
                 }
-                // Show a mask as the summary-style value once a token is stored
+                // Show the mask once a token is stored.
                 if (!TokenStore.getToken(requireContext()).isNullOrBlank() &&
-                    PreferenceManager.getDefaultSharedPreferences(requireContext())
-                        .getString(WallpaperWorker.PREF_API_TOKEN, null) != MASKED_TOKEN
+                    text != MASKED_TOKEN
                 ) {
-                    PreferenceManager.getDefaultSharedPreferences(requireContext())
-                        .edit().putString(WallpaperWorker.PREF_API_TOKEN, MASKED_TOKEN).apply()
+                    text = MASKED_TOKEN
                 }
             }
 
             findPreference<EditTextPreference>(WallpaperWorker.PREF_COLLECTION)?.apply {
                 setOnBindEditTextListener { it.inputType = InputType.TYPE_CLASS_TEXT }
+            }
+
+            findPreference<Preference>("collectionPicker")?.apply {
+                summary = sharedPreferences.getString(WallpaperWorker.PREF_COLLECTION, null)
+                    ?.takeIf { it.isNotBlank() }?.let { "Current: $it" }
+                    ?: "Pick from the server's list"
+                setOnPreferenceClickListener {
+                    val server = sharedPreferences.getString(WallpaperWorker.PREF_SERVER_URL, null)
+                    if (server.isNullOrBlank() || TokenStore.getToken(requireContext()) == null) {
+                        Toast.makeText(requireContext(), "Set the server URL and API token first", Toast.LENGTH_SHORT).show()
+                    } else {
+                        showCollectionPicker(server)
+                    }
+                    true
+                }
+            }
+        }
+
+        private fun showCollectionPicker(server: String) {
+            val ctx = requireContext()
+            val dialog = AlertDialog.Builder(ctx)
+                .setTitle("Collections")
+                .setMessage("Loading\u2026")
+                .setNegativeButton("Cancel", null)
+                .create()
+            dialog.show()
+
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val names = MonbooruApi.listCollections(server, TokenStore.getToken(ctx)!!)
+                    withContext(Dispatchers.Main) {
+                        if (!isAdded) return@withContext
+                        if (names.isEmpty()) {
+                            dialog.setMessage("No collections found on the server")
+                        } else {
+                            val list = ListView(ctx).apply {
+                                adapter = ArrayAdapter(ctx, android.R.layout.simple_list_item_1, names)
+                                divider = ContextCompat.getDrawable(ctx, android.R.drawable.divider_horizontal_bright)
+                            }
+                            list.onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ ->
+                                val picked = names[pos]
+                                PreferenceManager.getDefaultSharedPreferences(ctx)
+                                    .edit().putString(WallpaperWorker.PREF_COLLECTION, picked).apply()
+                                findPreference<Preference>("collectionPicker")?.summary = "Current: $picked"
+                                dialog.dismiss()
+                            }
+                            // A dialog's content view is fixed after show();
+                            // dismiss the "Loading" one and show the list in a
+                            // fresh dialog.
+                            dialog.dismiss()
+                            AlertDialog.Builder(ctx)
+                                .setTitle("Collections")
+                                .setView(list)
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        if (!isAdded) return@withContext
+                        dialog.setMessage("Failed: ${e.message ?: "network error"}")
+                    }
+                }
             }
         }
 
