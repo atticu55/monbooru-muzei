@@ -166,6 +166,18 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
         val cacheDir = applicationContext.cacheDir
         val keep = artworks.mapNotNull { it.persistentUri?.lastPathSegment?.substringAfterLast('/') }.toSet()
         cacheDir.listFiles()?.filter { it.name.startsWith("wallpaper_") && it.name !in keep }?.forEach { it.delete() }
-        ProviderContract.getProviderClient(applicationContext, AUTHORITY).setArtwork(artworks)
+        val client = ProviderContract.getProviderClient(applicationContext, AUTHORITY)
+        val uris = client.setArtwork(artworks)
+        if (uris.isEmpty()) {
+            // setArtwork swallowed the failure — probe the provider DB for the truth
+            val stored = client.contentUri?.let { uri ->
+                applicationContext.contentResolver.query(uri, null, null, null, null)?.use { it.count } ?: 0
+            } ?: 0
+            if (stored > 0) {
+                Log.w(TAG, "setArtwork returned empty but $stored rows present")
+            } else {
+                throw IOException("provider rejected all artwork (setArtwork failed, 0 rows stored)")
+            }
+        }
     }
 }
