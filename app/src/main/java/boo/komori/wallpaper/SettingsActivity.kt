@@ -82,11 +82,12 @@ class SettingsActivity : AppCompatActivity() {
             }
 
             findPreference<Preference>("collectionPicker")?.apply {
-                summary = sharedPreferences.getString(WallpaperWorker.PREF_COLLECTION, null)
+                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                summary = prefs.getString(WallpaperWorker.PREF_COLLECTION, null)
                     ?.takeIf { it.isNotBlank() }?.let { "Current: $it" }
                     ?: "Pick from the server's list"
                 setOnPreferenceClickListener {
-                    val server = sharedPreferences.getString(WallpaperWorker.PREF_SERVER_URL, null)
+                    val server = prefs.getString(WallpaperWorker.PREF_SERVER_URL, null)
                     if (server.isNullOrBlank() || TokenStore.getToken(requireContext()) == null) {
                         Toast.makeText(requireContext(), "Set the server URL and API token first", Toast.LENGTH_SHORT).show()
                     } else {
