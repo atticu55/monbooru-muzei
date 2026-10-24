@@ -18,6 +18,7 @@ import com.google.android.apps.muzei.api.provider.Artwork
 import com.google.android.apps.muzei.api.provider.ProviderContract
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -40,6 +41,13 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
+
+        private fun extensionForFileType(fileType: String): String? = when (fileType.lowercase()) {
+            "jpeg" -> "jpg"
+            "png", "webp", "gif", "avif", "jxl" -> fileType.lowercase()
+            // Videos and archives can't be wallpapers
+            else -> null
+        }
 
         internal fun enqueueLoad(context: Context, ignoreRequirements: Boolean = false) {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
@@ -89,8 +97,12 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
                 return Result.failure()
             }
 
-        // Search for images in the collection
-        val searchUrl = "$server/api/v1/images/search?q=collection:${Uri.encode(collection)}&sort=newest&limit=200"
+        // Search images in the collection. Real response shape (monbooru OpenAPI):
+        // {"page":..,"limit":..,"total":..,"results":[{id, file_type, source, url, ...}]}
+        // collection:"name" is an exact match on the collection label; sort=order
+        // returns the collection in its own order.
+        val query = "collection:\"$collection\""
+        val searchUrl = "$server/api/v1/images/search?q=${Uri.encode(query)}&sort=order&limit=200"
         val response = try {
             fetchJson(searchUrl, token)
         } catch (e: IOException) {
@@ -98,8 +110,8 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
             return Result.retry()
         }
 
-        val images = response.optJSONArray("images") ?: run {
-            Log.w(TAG, "No images array in response")
+        val images: JSONArray = response.optJSONArray("results") ?: run {
+            Log.w(TAG, "No results array in response: $response")
             return Result.failure()
         }
 
@@ -118,13 +130,14 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
             val id = img.optInt("id", -1)
             if (id == -1) continue
 
-            val fileType = img.optString("file_type", "jpg")
+            val fileType = img.optString("file_type", "")
+            val ext = extensionForFileType(fileType) ?: continue
             val source = img.optString("source", "")
             val imgUrl = img.optString("url", "")
 
             // Download the actual image file
             val downloadUrl = "$server/api/v1/images/$id/file"
-            val cachedFile = File(cacheDir, "wallpaper_${id}.${fileType}")
+            val cachedFile = File(cacheDir, "wallpaper_${id}.${ext}")
             try {
                 downloadFile(downloadUrl, token, cachedFile)
             } catch (e: IOException) {

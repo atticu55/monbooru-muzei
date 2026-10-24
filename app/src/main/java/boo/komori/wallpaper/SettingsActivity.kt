@@ -8,7 +8,7 @@ import androidx.preference.EditTextPreference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 
-private const val MASKED_TOKEN = "••••••••"
+private const val MASKED_TOKEN = "********"
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,11 +26,16 @@ class SettingsActivity : AppCompatActivity() {
         private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
             when (key) {
                 WallpaperWorker.PREF_API_TOKEN -> {
-                    // Route token to encrypted store, replace with mask in plain prefs
+                    // Route a newly typed token to the encrypted store, then
+                    // replace it with a mask in the plain prefs file. Blank or
+                    // mask values are ignored so cancelling the dialog can't
+                    // wipe the stored token.
                     val raw = prefs.getString(key, null)
-                    TokenStore.setToken(requireContext(), raw)
-                    prefs.edit().putString(key, MASKED_TOKEN).apply()
-                    WallpaperWorker.enqueueLoad(requireContext(), ignoreRequirements = true)
+                    if (!raw.isNullOrBlank() && raw != MASKED_TOKEN) {
+                        TokenStore.setToken(requireContext(), raw)
+                        prefs.edit().putString(key, MASKED_TOKEN).apply()
+                        WallpaperWorker.enqueueLoad(requireContext(), ignoreRequirements = true)
+                    }
                 }
                 WallpaperWorker.PREF_SERVER_URL,
                 WallpaperWorker.PREF_COLLECTION ->
@@ -48,17 +53,18 @@ class SettingsActivity : AppCompatActivity() {
             findPreference<EditTextPreference>(WallpaperWorker.PREF_API_TOKEN)?.apply {
                 setOnBindEditTextListener {
                     it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    // Always open the dialog with an empty field: the stored
+                    // token never appears on screen, and a cancelled dialog
+                    // leaves the saved token untouched.
+                    it.setText("")
                 }
-                // Show mask if token already stored securely
-                if (!TokenStore.getToken(requireContext()).isNullOrBlank()) {
+                // Show a mask as the summary-style value once a token is stored
+                if (!TokenStore.getToken(requireContext()).isNullOrBlank() &&
+                    PreferenceManager.getDefaultSharedPreferences(requireContext())
+                        .getString(WallpaperWorker.PREF_API_TOKEN, null) != MASKED_TOKEN
+                ) {
                     PreferenceManager.getDefaultSharedPreferences(requireContext())
                         .edit().putString(WallpaperWorker.PREF_API_TOKEN, MASKED_TOKEN).apply()
-                }
-                // Clear mask when user opens dialog so they can type a new token
-                setOnPreferenceClickListener {
-                    PreferenceManager.getDefaultSharedPreferences(requireContext())
-                        .edit().putString(WallpaperWorker.PREF_API_TOKEN, "").apply()
-                    false
                 }
             }
 
