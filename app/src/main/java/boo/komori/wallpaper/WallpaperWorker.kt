@@ -63,7 +63,7 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
     private data class Page(val results: JSONArray, val total: Int)
 
     private fun fetchSearchPage(server: String, token: String, query: String, page: Int): Page {
-        val body = MonbooruApi.search(server, token, query, "order", page)
+        val body = MonbooruApi.search(server, token, query, sort = "order", page = page)
         val results = body.optJSONArray("results")
             ?: throw IOException("Search response missing results array")
         return Page(results, body.optInt("total", 0))
@@ -98,6 +98,8 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
 
         // collection:"name" is an exact match; sort=order returns the
         // collection in its own order (falls back to id order when unset).
+        // NOTE: MonbooruApi.search takes (query, sort, page) in that order —
+        // an earlier version passed them swapped (page got "order").
         val query = "collection:\"$collection\""
         val cacheDir = applicationContext.cacheDir
 
@@ -111,6 +113,7 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
                 if (p.results.length() == 0) break
                 for (i in 0 until p.results.length()) {
                     val img = p.results.getJSONObject(i)
+                    if (img.optBoolean("is_missing", false)) continue
                     val id = img.optLong("id", -1)
                     if (id == -1L) continue
 

@@ -37,8 +37,8 @@ object MonbooruApi {
 
     /**
      * Distinct collection names. The REST API has no "list collections"
-     * endpoint, so walk collection:any and read each image's collections[]
-     * array (an image can belong to several).
+     * endpoint, so walk collection:any and read each image's `collection`
+     * field (a single string per image).
      */
     fun listCollections(server: String, token: String): List<String> {
         val names = LinkedHashSet<String>()
@@ -49,12 +49,6 @@ object MonbooruApi {
             if (results.length() == 0) break
             for (i in 0 until results.length()) {
                 val img = results.getJSONObject(i)
-                img.optJSONArray("collections")?.let { cols ->
-                    for (j in 0 until cols.length()) {
-                        val name = cols.optJSONObject(j)?.optString("name").orEmpty()
-                        if (name.isNotBlank()) names += name
-                    }
-                }
                 img.optString("collection", "").takeIf { it.isNotBlank() }?.let { names += it }
             }
             val total = body.optInt("total", 0)
