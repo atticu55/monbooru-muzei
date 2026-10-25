@@ -18,6 +18,7 @@ object MonbooruApi {
     val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .dns(MagicDnsFallback)
         .build()
 
     private fun request(url: String, token: String) = Request.Builder()
