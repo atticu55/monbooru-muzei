@@ -12,9 +12,9 @@ android {
         // versions install over old ones and Muzei keeps its selection.
         komori {
             storeFile rootProject.file('komori-debug.keystore')
-            storePassword 'komori-wallpaper'
+            storePassword System.getenv('KOMORI_STORE_PASS') ?: 'komori-wallpaper'
             keyAlias 'komori'
-            keyPassword 'komori-wallpaper'
+            keyPassword System.getenv('KOMORI_STORE_PASS') ?: 'komori-wallpaper'
         }
     }
 

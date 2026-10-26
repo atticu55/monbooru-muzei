@@ -39,9 +39,12 @@ its provider selection. Create your own once:
 ```
 keytool -genkeypair -v -keystore komori-debug.keystore \
   -alias komori -keyalg RSA -keysize 2048 -validity 10000 \
-  -storepass komori-wallpaper -keypass komori-wallpaper \
+  -storepass <your-password> -keypass <your-password> \
   -dname "CN=komori"
 ```
+
+`app/build.gradle` reads the store password from `KOMORI_STORE_PASS`,
+falling back to the placeholder for local debug builds.
 
 Then `./gradlew assembleDebug` (or `./build.sh`), APK lands in
 `app/build/outputs/apk/debug/`.
