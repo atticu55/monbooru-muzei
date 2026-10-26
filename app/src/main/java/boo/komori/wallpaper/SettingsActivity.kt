@@ -129,22 +129,26 @@ class SettingsActivity : AppCompatActivity() {
                                 adapter = ArrayAdapter(ctx, android.R.layout.simple_list_item_1, names)
                                 divider = ContextCompat.getDrawable(ctx, android.R.drawable.divider_horizontal_bright)
                             }
+                            // A dialog's content view is fixed after show();
+                            // dismiss the "Loading" one and show the list in a
+                            // fresh dialog. Keep the fresh dialog's reference —
+                            // the click handler must dismiss THIS one (the old
+                            // "dialog" var is already gone, and dismissing it
+                            // silently left the popup stuck on screen).
+                            dialog.dismiss()
+                            val listDialog = AlertDialog.Builder(ctx)
+                                .setTitle("Collections")
+                                .setView(list)
+                                .setNegativeButton("Cancel", null)
+                                .create()
                             list.onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ ->
                                 val picked = names[pos]
                                 PreferenceManager.getDefaultSharedPreferences(ctx)
                                     .edit().putString(WallpaperWorker.PREF_COLLECTION, picked).apply()
                                 findPreference<Preference>("collectionPicker")?.summary = "Current: $picked"
-                                dialog.dismiss()
+                                listDialog.dismiss()
                             }
-                            // A dialog's content view is fixed after show();
-                            // dismiss the "Loading" one and show the list in a
-                            // fresh dialog.
-                            dialog.dismiss()
-                            AlertDialog.Builder(ctx)
-                                .setTitle("Collections")
-                                .setView(list)
-                                .setNegativeButton("Cancel", null)
-                                .show()
+                            listDialog.show()
                         }
                     }
                 } catch (e: Exception) {
