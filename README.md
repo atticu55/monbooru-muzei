@@ -4,7 +4,7 @@ A [Muzei](https://github.com/romannurik/muzei) live-wallpaper source plugin for
 [Monbooru](https://github.com/sdidas/monbooru) — pick one of your Monbooru
 collections and Muzei turns it into a rotating wallpaper feed on your phone.
 
-Developed by [Atticus](https://github.com/Atticu55), with Ana Phampyk as
+Developed by [Atticus](https://github.com/Atticu55), with Ana as
 product owner, chief complainer, and finder of the actual bug after six
 builds of the vampire chasing DNS ghosts.
 
