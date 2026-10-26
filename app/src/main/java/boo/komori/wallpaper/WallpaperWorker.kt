@@ -1,9 +1,10 @@
 package boo.komori.wallpaper
 
+import android.content.ContentUris
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
-import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
 import androidx.work.BackoffPolicy
@@ -26,7 +27,6 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
     companion object {
         private const val TAG = "WallpaperWorker"
         const val AUTHORITY = "boo.komori.wallpaper"
-        const val FILE_PROVIDER_AUTHORITY = "boo.komori.wallpaper.fileprovider"
         const val PREF_SERVER_URL = "serverUrl"
         const val PREF_API_TOKEN = "apiToken"
         const val PREF_COLLECTION = "collection"
@@ -126,16 +126,18 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
 
                     val cachedFile = File(cacheDir, "wallpaper_$id.$ext")
                     MonbooruApi.downloadImage(server, token, id, cachedFile)
-                    val fileUri = FileProvider.getUriForFile(
-                        applicationContext, FILE_PROVIDER_AUTHORITY, cachedFile
-                    )
 
                     val source = img.optString("source", "")
                     val builder = Artwork.Builder()
                         .token(id.toString())
                         .title(if (source.isNotBlank()) source else "Wallpaper $id")
                         .byline(collection)
-                        .persistentUri(fileUri)
+                        // Plain file path, same as the pixiv/wallhaven providers.
+                        // FileProvider content:// URIs break Muzei's own load path:
+                        // MuzeiArtProvider stores DATA from the URI path, and a
+                        // FileProvider path (/cache/...) is neither openable nor
+                        // writable as a file, so Muzei's preload fails and shows nothing.
+                        .persistentUri(Uri.fromFile(cachedFile))
                     img.optString("url", "").takeIf { it.isNotBlank() }?.let { builder.webUri(it.toUri()) }
                     artworks += builder.build()
                 }
@@ -149,7 +151,9 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
                 return Result.retry()
             }
             publish(artworks)
-            SyncStatus.mark(applicationContext, "ok", "${artworks.size} of $total (partial: ${e.message})")
+            val problem = verifyStoredArtwork(artworks.size)
+            if (problem != null) SyncStatus.mark(applicationContext, "error", problem)
+            else SyncStatus.mark(applicationContext, "ok", "${artworks.size} of $total (partial: ${e.message})")
             return Result.success()
         }
 
@@ -160,9 +164,47 @@ class WallpaperWorker(context: Context, params: WorkerParameters) : Worker(conte
         }
 
         publish(artworks)
-        SyncStatus.mark(applicationContext, "ok", "$total images loaded")
+        val problem = verifyStoredArtwork(artworks.size)
+        if (problem != null) {
+            SyncStatus.mark(applicationContext, "error", problem)
+            return Result.success()
+        }
+        SyncStatus.mark(applicationContext, "ok", "${artworks.size} of $total loaded, verified")
         Log.i(TAG, "Loaded ${artworks.size} of $total wallpapers from '$collection'")
         return Result.success()
+    }
+
+    /**
+     * Muzei's own ArtworkLoadWorker openInputStream()s every artwork and rejects
+     * undecodable images before it will show anything. Mirror that exact check
+     * here so the status line reports the real failure instead of a fake "ok".
+     * Returns null when every stored row opens and decodes, else a reason.
+     */
+    private fun verifyStoredArtwork(count: Int): String? {
+        val contentUri = ProviderContract.getContentUri(AUTHORITY)
+        val resolver = applicationContext.contentResolver
+        var verified = 0
+        resolver.query(contentUri, null, null, null, null)?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow("_id"))
+                val uri = ContentUris.withAppendedId(contentUri, id)
+                try {
+                    resolver.openInputStream(uri)?.use { stream ->
+                        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeStream(stream, null, opts)
+                        if (opts.outWidth != 0 && opts.outHeight != 0) {
+                            verified++
+                        } else {
+                            return "self-check: image $id not decodable ($verified/$count readable)"
+                        }
+                    } ?: return "self-check: image $id could not be opened ($verified/$count readable)"
+                } catch (e: Exception) {
+                    return "self-check: image $id failed (${e.javaClass.simpleName}: ${e.message})"
+                }
+            }
+        }
+        Log.i(TAG, "Self-check passed: $verified/$count images readable")
+        return null
     }
 
     private fun publish(artworks: List<Artwork>) {
