@@ -1,18 +1,61 @@
-# wallpaper-muzei
+# Monbooru Wallpapers for Muzei
 
-Tiny Muzei source app + NAS index generator. Phone wallpapers live in folders
-on the NAS; Muzei picks a random one from a chosen folder. No gallery server,
-no tagging, no images stored on the phone beyond Muzei's cache.
+A [Muzei](https://github.com/romannurik/muzei) live-wallpaper source plugin for
+[Monbooru](https://github.com/sdidas/monbooru) — pick one of your Monbooru
+collections and Muzei turns it into a rotating wallpaper feed on your phone.
 
-## Parts
-- nas/generate-index.sh — bash+jq; scans wallpaper folders, writes
-  per-folder index.json + manifest.json into a web-served output dir.
-  Artwork entries: {id,name,artist,url,downloadUrl} (Muzei-compatible).
-- app/ (pending) — Kotlin Muzei source: GETs manifest + chosen folder's
-  index.json, random pick per load, artwork downloaded by Muzei itself.
+Developed by [Atticus](https://github.com/Atticu55), with Ana Phampyk as
+product owner, chief complainer, and finder of the actual bug after six
+builds of the vampire chasing DNS ghosts.
 
-## Status
-- [x] index generator (tested: 2 folders, 5 files, clean JSON)
-- [ ] audit of FluffyDiscord/muzei-custom-source skeleton (child agent)
-- [ ] app build (gradle-in-docker), APK install on Pixel 8
-- [ ] kaede: Web Station/static serving + Task Scheduler job
+## Features
+
+- Pick any Monbooru collection from a searchable list in-app
+- Syncs the full collection (paginated, 200/page, up to 10k images) into
+  Muzei's artwork queue
+- Images download once into the app's private cache and are handed to Muzei
+  as plain files — no FileProvider URIs, which Muzei's artwork preloader
+  can't open cross-app
+- Post-sync self-check opens every stored image exactly the way Muzei does
+  (decode-test), so the status line reports the real failure instead of a
+  false "OK"
+- Tailscale-friendly: MagicDNS names that Android's private DNS won't
+  resolve fall back to querying the Tailscale resolver (100.100.100.100)
+  directly
+- Only wifi / only-charging / battery-not-low constraints, standard Muzei
+  behaviour, new wallpapers picked up automatically when Muzei asks for more
+- Cache self-cleans: changing collections deletes the previous set
+
+## Building
+
+Requires JDK 17 and the Android SDK (API 35). `./build.sh` builds inside
+Docker instead (`gradle:8.12-jdk17` + a shared SDK volume), so the host
+stays clean.
+
+The project signs with a persistent debug keystore (`komori-debug.keystore`,
+not in git) so every new APK installs over the previous one and Muzei keeps
+its provider selection. Create your own once:
+
+```
+keytool -genkeypair -v -keystore komori-debug.keystore \
+  -alias komori -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass komori-wallpaper -keypass komori-wallpaper \
+  -dname "CN=komori"
+```
+
+Then `./gradlew assembleDebug` (or `./build.sh`), APK lands in
+`app/build/outputs/apk/debug/`.
+
+## Setup
+
+1. Install the APK, open Muzei, pick **Monbooru Wallpapers**
+2. In the plugin settings: server URL (e.g. `https://monbooru.example.com`),
+   API token, then **Choose collection**
+3. Sync once; the status line shows live progress and the self-check result
+
+The Monbooru server URL and API token never leave the app; the token is
+stored in Android's encrypted preferences.
+
+## License
+
+MIT

@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 LOG="build-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG") 2>&1
 
-note(){ openclaw system event --mode now --session-key agent:main:main --text "wallpaper-muzei build: $1" || true; }
+note(){ echo "[build] $1"; }
 
 echo "=== [$(date)] installing SDK pieces into volume (if needed) ==="
 docker run --rm -v android-sdk-vol:/opt/android-sdk mobiledevops/android-sdk-image \

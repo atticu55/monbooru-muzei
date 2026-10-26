@@ -6,3 +6,6 @@ local.properties
 serve/
 build-*.log
 keystore
+
+# build artifacts
+*.zip
