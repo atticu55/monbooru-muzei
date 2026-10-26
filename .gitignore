@@ -9,3 +9,4 @@ keystore
 
 # build artifacts
 *.zip
+.current-build-log
