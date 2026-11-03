@@ -1,23 +1,19 @@
 package boo.komori.wallpaper
 
-import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -131,7 +127,7 @@ class SettingsActivity : AppCompatActivity() {
 
         private fun showCollectionPicker(server: String) {
             val ctx = requireContext()
-            val dialog = AlertDialog.Builder(ctx)
+            val dialog = MaterialAlertDialogBuilder(ctx)
                 .setTitle("Collections")
                 .setMessage("Loading\u2026")
                 .setNegativeButton("Cancel", null)
@@ -144,12 +140,15 @@ class SettingsActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) {
                         if (!isAdded) return@withContext
                         if (names.isEmpty()) {
-                            dialog.setMessage("No collections found on the server")
+                            // A dialog's content is fixed after show(); dismiss
+                            // the "Loading" one and show a fresh dialog.
+                            dialog.dismiss()
+                            MaterialAlertDialogBuilder(ctx)
+                                .setTitle("Collections")
+                                .setMessage("No collections found on the server")
+                                .setNegativeButton("Cancel", null)
+                                .show()
                         } else {
-                            val list = ListView(ctx).apply {
-                                adapter = ArrayAdapter(ctx, android.R.layout.simple_list_item_1, names)
-                                divider = ContextCompat.getDrawable(ctx, android.R.drawable.divider_horizontal_bright)
-                            }
                             // A dialog's content view is fixed after show();
                             // dismiss the "Loading" one and show the list in a
                             // fresh dialog. Keep the fresh dialog's reference —
@@ -157,25 +156,32 @@ class SettingsActivity : AppCompatActivity() {
                             // "dialog" var is already gone, and dismissing it
                             // silently left the popup stuck on screen).
                             dialog.dismiss()
-                            val listDialog = AlertDialog.Builder(ctx)
+                            val current = PreferenceManager.getDefaultSharedPreferences(ctx)
+                                .getString(WallpaperWorker.PREF_COLLECTION, null)
+                            val checkedIndex = names.indexOf(current)
+                            val listDialog = MaterialAlertDialogBuilder(ctx)
                                 .setTitle("Collections")
-                                .setView(list)
+                                .setSingleChoiceItems(names.toTypedArray(), checkedIndex) { d, which ->
+                                    val picked = names[which]
+                                    PreferenceManager.getDefaultSharedPreferences(ctx)
+                                        .edit().putString(WallpaperWorker.PREF_COLLECTION, picked).apply()
+                                    findPreference<Preference>("collectionPicker")?.summary = "Current: $picked"
+                                    d.dismiss()
+                                }
                                 .setNegativeButton("Cancel", null)
                                 .create()
-                            list.onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ ->
-                                val picked = names[pos]
-                                PreferenceManager.getDefaultSharedPreferences(ctx)
-                                    .edit().putString(WallpaperWorker.PREF_COLLECTION, picked).apply()
-                                findPreference<Preference>("collectionPicker")?.summary = "Current: $picked"
-                                listDialog.dismiss()
-                            }
                             listDialog.show()
                         }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         if (!isAdded) return@withContext
-                        dialog.setMessage("Failed: ${e.message ?: "network error"}")
+                        dialog.dismiss()
+                        MaterialAlertDialogBuilder(ctx)
+                            .setTitle("Collections")
+                            .setMessage("Failed: ${e.message ?: "network error"}")
+                            .setNegativeButton("Cancel", null)
+                            .show()
                     }
                 }
             }
