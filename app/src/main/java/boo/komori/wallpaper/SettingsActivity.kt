@@ -14,7 +14,6 @@ import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
-import com.google.android.material.R as MaterialR
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -263,7 +262,6 @@ class SettingsActivity : AppCompatActivity() {
             // picks it up from the dialog's Material theme without needing a
             // layout resource.
             val inputLayout = TextInputLayout(requireContext())
-            inputLayout.style = MaterialR.attr.textInputStyle
             val input = TextInputEditText(requireContext())
             // Single line for URL/collection; the token field may wrap.
             input.inputType = if (preferenceKey == WallpaperWorker.PREF_API_TOKEN) {
