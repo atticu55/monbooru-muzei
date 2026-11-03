@@ -33,6 +33,7 @@
          swapped layout roots the widget in a MaterialSwitch; the fat pill and
          the check/X thumb icon live in that layout's style. -->
     <style name="Preference.SwitchPreferenceCompat.App" parent="Preference.SwitchPreferenceCompat.Material">
+        <item name="android:layout">@layout/preference_row_switch_uniform</item>
         <item name="android:widgetLayout">@layout/preference_widget_material_switch</item>
     </style>
 

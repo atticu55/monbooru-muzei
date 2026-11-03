@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.9.3: row layout for the title-only switch rows so they match the
+     height of the two-line (title+summary) rows — uniform across the whole
+     screen, as seen on her Pixel's Settings (About phone: Legal & regulatory
+     title-only rows are the same height as the Basic info info-rows, titles
+     vertically centered; measured 100-101px at her 576px width, symmetric
+     top/bottom text gaps 41-42/37-38px).
+     Ground truth from our own renders: a two-line row is 16dp + title(57px)
+     + summary(51px) + 16dp = 192px = 73.14dp at 420dpi. Root minHeight pins
+     every switch row to that height; the root's gravity=center_vertical
+     centers the title-only content ( RelativeLayout child) and the switch.
+     Structure is otherwise a copy of the library's preference_material.xml
+     (androidx.preference 1.2.1) so binding is unchanged: same title/summary
+     ids, widget_frame hosting our MaterialSwitch widget layout. -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="73.14dp"
+    android:gravity="center_vertical"
+    android:paddingLeft="?android:attr/listPreferredItemPaddingLeft"
+    android:paddingStart="?android:attr/listPreferredItemPaddingStart"
+    android:paddingRight="?android:attr/listPreferredItemPaddingRight"
+    android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
+    android:background="?android:attr/selectableItemBackground"
+    android:clipToPadding="false"
+    android:baselineAligned="false">
+
+    <include layout="@layout/image_frame"/>
+
+    <RelativeLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <TextView
+            android:id="@android:id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:textAppearance="?android:attr/textAppearanceListItem"
+            android:ellipsize="marquee"/>
+
+        <TextView
+            android:id="@android:id/summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@android:id/title"
+            android:layout_alignLeft="@android:id/title"
+            android:layout_alignStart="@android:id/title"
+            android:layout_gravity="start"
+            android:textAlignment="viewStart"
+            android:textColor="?android:attr/textColorSecondary"
+            android:maxLines="10"
+            style="@style/PreferenceSummaryTextStyle"/>
+
+    </RelativeLayout>
+
+    <!-- Preference should place its actual preference widget here. -->
+    <LinearLayout
+        android:id="@android:id/widget_frame"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:gravity="end|center_vertical"
+        android:paddingLeft="16dp"
+        android:paddingStart="16dp"
+        android:paddingRight="0dp"
+        android:paddingEnd="0dp"
+        android:orientation="vertical"/>
+
+</LinearLayout>
