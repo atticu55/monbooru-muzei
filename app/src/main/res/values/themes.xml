@@ -1,9 +1,9 @@
 <resources>
     <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="preferenceTheme">@style/PreferenceThemeOverlay</item>
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay.App</item>
     </style>
 
-    <style name="PreferenceThemeOverlay" parent="PreferenceThemeOverlay">
+    <style name="PreferenceThemeOverlay.App" parent="PreferenceThemeOverlay">
         <item name="switchPreferenceCompatStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch</item>
     </style>
 </resources>
