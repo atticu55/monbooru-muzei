@@ -45,8 +45,7 @@
         <SwitchPreferenceCompat
             app:key="onlyWifi"
             app:defaultValue="false"
-            app:title="Only on unmetered network"
-            app:summary="Skip refreshes on mobile data"
+            app:title="Only on Wi-Fi"
             app:iconSpaceReserved="false" />
 
         <SwitchPreferenceCompat
