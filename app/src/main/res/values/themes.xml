@@ -4,6 +4,27 @@
     </style>
 
     <style name="PreferenceThemeOverlay.App" parent="PreferenceThemeOverlay">
-        <item name="switchPreferenceCompatStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch</item>
+        <item name="switchPreferenceCompatStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch.Compact</item>
+        <item name="preferenceCategoryStyle">@style/Preference.Category.App</item>
+    </style>
+
+    <!-- v1.8: M3 section headers — small, colored, medium weight, like Pixel
+         Settings. Preference.Category.Material's title is textAppearanceSmall
+         in the fallback accent color; this tightens it to a label. -->
+    <style name="Preference.Category.App" parent="Preference.Category.Material">
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
+    <!-- v1.8: the stock MaterialSwitch sets android:minHeight to
+         ?attr/minTouchTargetSize (48dp), which inflates the preference row
+         (the row itself is only ~48dp tall) and makes the bottom section
+         look oversized. Tighten the touch target back to the compact
+         switch metrics; the row's own minHeight keeps the tap area. -->
+    <style name="Widget.Material3.CompoundButton.MaterialSwitch.Compact" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="android:minHeight">32dp</item>
+        <item name="android:minWidth">36dp</item>
     </style>
 </resources>

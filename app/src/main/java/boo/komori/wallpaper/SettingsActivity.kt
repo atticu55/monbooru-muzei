@@ -1,19 +1,23 @@
 package boo.komori.wallpaper
 
+import android.app.Dialog
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.text.InputType
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.DialogFragment
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
+import com.google.android.material.R as MaterialR
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -125,6 +129,18 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // v1.8: the preference library's default EditTextPreference dialog is
+        // the old AppCompat AlertDialog. Intercept it and show a Material 3
+        // dialog with an outlined text field instead. Everything else
+        // (e.g. ListPreference) falls through to the default behavior.
+        override fun onDisplayPreferenceDialog(preference: Preference) {
+            if (preference is EditTextPreference) {
+                MaterialEditTextDialogFragment.show(this, preference.key)
+            } else {
+                super.onDisplayPreferenceDialog(preference)
+            }
+        }
+
         private fun showCollectionPicker(server: String) {
             val ctx = requireContext()
             val dialog = MaterialAlertDialogBuilder(ctx)
@@ -212,6 +228,81 @@ class SettingsActivity : AppCompatActivity() {
             PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .unregisterOnSharedPreferenceChangeListener(prefListener)
             super.onPause()
+        }
+    }
+
+    /**
+     * Material 3 replacement for the preference library's default
+     * EditTextPreference dialog. Shown from
+     * [SettingsFragment.onDisplayPreferenceDialog]; persists through the
+     * [EditTextPreference] object (never SharedPreferences directly) so the
+     * existing summary providers and the token-masking listener keep working.
+     *
+     * A plain [DialogFragment] so it survives rotation like the default
+     * PreferenceDialogFragmentCompat does.
+     */
+    class MaterialEditTextDialogFragment : DialogFragment() {
+
+        private val preferenceKey: String
+            get() = requireArguments().getString(ARG_PREFERENCE_KEY)
+                ?: error("MaterialEditTextDialogFragment requires the preference key argument")
+
+        override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+            // Resolve the live preference instance at dialog-creation time,
+            // not a stale reference captured by the caller.
+            val preference = (parentFragment as? SettingsFragment)
+                ?.findPreference<EditTextPreference>(preferenceKey)
+                ?: error("Preference $preferenceKey not found")
+
+            val builder = MaterialAlertDialogBuilder(requireContext())
+                .setTitle(preference.dialogTitle ?: preference.title)
+                .setNegativeButton("Cancel", null)
+
+            // Build the text field programmatically: the M3 outlined box
+            // style is a theme attribute, so a programmatic TextInputLayout
+            // picks it up from the dialog's Material theme without needing a
+            // layout resource.
+            val inputLayout = TextInputLayout(requireContext())
+            inputLayout.style = MaterialR.attr.textInputStyle
+            val input = TextInputEditText(requireContext())
+            // Single line for URL/collection; the token field may wrap.
+            input.inputType = if (preferenceKey == WallpaperWorker.PREF_API_TOKEN) {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            } else {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            }
+            inputLayout.addView(input)
+            builder.setView(inputLayout)
+
+            // Prefill: the token always opens empty (the stored token never
+            // appears on screen); the other two show their current value.
+            if (preferenceKey != WallpaperWorker.PREF_API_TOKEN) {
+                input.setText(preference.text ?: "")
+            }
+
+            builder.setPositiveButton("Save") { _, _ ->
+                // Persist through the preference object: this triggers the
+                // summary providers and the token-masking listener exactly
+                // like the old dialog did. Zero validation, as before.
+                preference.text = input.text?.toString() ?: ""
+            }
+
+            return builder.create()
+        }
+
+        companion object {
+            private const val ARG_PREFERENCE_KEY = "preference_key"
+            private const val TAG = "MaterialEditTextDialog"
+
+            fun show(fragment: SettingsFragment, key: String) {
+                val args = Bundle().apply { putString(ARG_PREFERENCE_KEY, key) }
+                val dialog = MaterialEditTextDialogFragment().apply { arguments = args }
+                // Child manager: the dialog lives and dies with the settings
+                // fragment, and survives rotation via the standard
+                // DialogFragment state restoration.
+                if (fragment.childFragmentManager.findFragmentByTag(TAG) != null) return
+                dialog.show(fragment.childFragmentManager, TAG)
+            }
         }
     }
 }
