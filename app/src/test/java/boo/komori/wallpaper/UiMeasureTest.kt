@@ -38,19 +38,10 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(
     sdk = [35],
-    shadows = [UiMeasureTest.ShadowTokenStore::class],
+    shadows = [ShadowTokenStore::class],
     qualifiers = "w411dp-h891dp-420dpi"
 )
 class UiMeasureTest {
-
-    @Implements(TokenStore::class)
-    class ShadowTokenStore {
-        @Implementation
-        fun getToken(context: Context): String? = null
-
-        @Implementation
-        fun setToken(context: Context, token: String?) {}
-    }
 
     // Gradle runs unit tests with the module dir as cwd, so "build/ui-shots"
     // lands in app/build/ui-shots on the host (v1.8's "app/build/..." path
@@ -152,7 +143,7 @@ class UiMeasureTest {
     @Test
     @Config(
         sdk = [35],
-        shadows = [UiMeasureTest.ShadowTokenStore::class],
+        shadows = [ShadowTokenStore::class],
         qualifiers = "w411dp-h891dp-night-420dpi"
     )
     fun dumpNight() {
