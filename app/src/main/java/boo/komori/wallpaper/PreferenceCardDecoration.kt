@@ -1,14 +1,31 @@
 package boo.komori.wallpaper
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.drawable.RippleDrawable
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.RoundRectShape
 import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+
+/** Where a row sits inside its category group — decides which of the card's
+ *  rounded corners its press highlight must follow. */
+enum class RowPosition { FIRST, MIDDLE, LAST, SINGLE }
+
+/** Bounded ripple whose mask is rounded. Carries its [RowPosition] so the
+ *  decoration can skip re-assigning an already-correct background. */
+class MaskedRipple(
+    color: ColorStateList,
+    val mask: ShapeDrawable,
+    val position: RowPosition
+) : RippleDrawable(color, null, mask)
 
 /**
  * v1.9 — draws one rounded Material 3 card behind each preference category
@@ -28,6 +45,18 @@ import androidx.recyclerview.widget.RecyclerView
  * "root is a TextView" IS the header marker. This replaces the earlier
  * getItemViewType approach, whose return semantics in 1.2.1 were never
  * verified against source.
+ *
+ * v1.9.4 — every preference row layout (the library's and our switch copy)
+ * ships ?android:selectableItemBackground: a bounded ripple with a
+ * RECTANGULAR mask. The card behind the row is rounded, so a long-press
+ * highlight painted square corners past the card outline (Ana's report,
+ * 2026-11-03 19:51). During each draw pass this decoration also swaps each
+ * attached row's background for a ripple masked to that row's slice of the
+ * card — first row rounds the top corners, last row the bottom, middle
+ * rows stay square (their edges are internal seams) — reusing the card's
+ * own radius, so highlight and card match by construction. The ripple
+ * color is the same ?android:colorControlHighlight the stock background
+ * used, so only the shape changes.
  */
 class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration() {
 
@@ -52,6 +81,27 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
     // cut through the card (Pixel Settings look).
     private val gapPaint = Paint().apply {
         color = context.getColor(R.color.settings_page_bg)
+    }
+
+    // v1.9.4: the same highlight color the stock selectableItemBackground
+    // used, so swapping backgrounds changes only the mask shape. Resolved
+    // once from the activity theme (Material3 DayNight).
+    private val rippleColor: ColorStateList = run {
+        val tv = TypedValue()
+        if (context.theme.resolveAttribute(android.R.attr.colorControlHighlight, tv, true)) {
+            if (tv.resourceId != 0) {
+                try {
+                    context.resources.getColorStateList(tv.resourceId, context.theme)
+                } catch (e: Exception) {
+                    ColorStateList.valueOf(context.getColor(tv.resourceId))
+                }
+            } else {
+                ColorStateList.valueOf(tv.data)
+            }
+        } else {
+            // Theme did not define it: neutral translucent grey, never opaque.
+            ColorStateList.valueOf(0x33808080.toInt())
+        }
     }
 
     /** Adapter positions [start..end] of the rows of one category group. */
@@ -89,6 +139,46 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
         return out
     }
 
+    // v1.9.4: rounded-rect mask for a row's slice of the card.
+    // RoundRectShape radii order: tlx, tly, trx, try, brx, bry, blx, bly.
+    private fun rippleFor(position: RowPosition): MaskedRipple {
+        val r = cornerRadius
+        val radii: FloatArray? = when (position) {
+            RowPosition.FIRST -> floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            RowPosition.LAST -> floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r)
+            RowPosition.SINGLE -> floatArrayOf(r, r, r, r, r, r, r, r)
+            RowPosition.MIDDLE -> null
+        }
+        val mask = ShapeDrawable(RoundRectShape(radii, null, null)).apply {
+            paint.color = Color.BLACK // mask uses alpha only
+        }
+        return MaskedRipple(rippleColor, mask, position)
+    }
+
+    /** Swap each row's rectangular ripple for one masked to its card slice.
+     *  Runs on every draw pass; the per-row position check makes the steady
+     *  state allocation-free, and rows that recycle into another group
+     *  position get re-masked on the next frame. */
+    private fun applyRippleMasks(children: Map<Int, View>, groups: List<Group>) {
+        for (g in groups) {
+            val size = g.end - g.start + 1
+            for (p in g.start..g.end) {
+                children[p]?.let { row ->
+                    if (row is TextView) return@let // headers: no highlight
+                    val want = when {
+                        size == 1 -> RowPosition.SINGLE
+                        p == g.start -> RowPosition.FIRST
+                        p == g.end -> RowPosition.LAST
+                        else -> RowPosition.MIDDLE
+                    }
+                    if ((row.background as? MaskedRipple)?.position != want) {
+                        row.background = rippleFor(want)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         super.onDraw(c, parent, state)
         // Draw for attached children only; a partially scrolled group gets
@@ -97,7 +187,9 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
         if (children.isEmpty()) return
         val left = (parent.paddingLeft + cardMargin).toFloat()
         val right = (parent.width - parent.paddingRight - cardMargin).toFloat()
-        for (g in adapterGroups(children)) {
+        val groups = adapterGroups(children)
+        applyRippleMasks(children, groups)
+        for (g in groups) {
             var top = Int.MAX_VALUE
             var bottom = Int.MIN_VALUE
             for (p in g.start..g.end) {
