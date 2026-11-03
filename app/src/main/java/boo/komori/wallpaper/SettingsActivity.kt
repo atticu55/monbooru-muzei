@@ -2,6 +2,7 @@ package boo.komori.wallpaper
 
 import android.app.Dialog
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.text.InputType
@@ -196,11 +197,30 @@ class SettingsActivity : AppCompatActivity() {
             // v1.9: one rounded M3 card behind each category group (Pixel
             // Settings look) — see PreferenceCardDecoration.
             listView.addItemDecoration(PreferenceCardDecoration(requireContext()))
+            // v1.9.1: the library's DividerDecoration draws a full-width
+            // line between every row by default. The card fill covers the
+            // ones inside a group, leaving only strays between the cards.
+            // M3 list guidance: dividers are for lists NOT in a container;
+            // rows grouped in a card separate by gaps. Clear the drawable.
+            setDivider(null)
             // Edge-to-edge (enforced on Android 15 / targetSdk 35): pad the
             // preference list for the status and navigation bars so it never
             // renders underneath them.
             ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
                 val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                // v1.9.1: the system bar areas show the window background,
+                // which is light in day mode — so the bar icons must track
+                // the theme. Without this the default white status icons sat
+                // invisible against the light background (Ana's day-mode
+                // report). Done here, post-attach, because the insets
+                // controller is only available once the view is attached
+                // (same trap the v1.8 insets code fell into).
+                val isDay = (resources.configuration.uiMode
+                    and Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES
+                ViewCompat.getWindowInsetsController(v)?.apply {
+                    isAppearanceLightStatusBars = isDay
+                    isAppearanceLightNavigationBars = isDay
+                }
                 if (basePadding == null) {
                     basePadding = Rect(v.paddingLeft, v.paddingTop, v.paddingRight, v.paddingBottom)
                 }
