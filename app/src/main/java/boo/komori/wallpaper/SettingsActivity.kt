@@ -285,7 +285,7 @@ class SettingsActivity : AppCompatActivity() {
                 // Deterministic outlined box: the theme's default
                 // textInputStyle is not involved at all (v1.8 measurement
                 // showed runtime resolution diverging from expectations).
-                boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINED
+                boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
                 hint = preference.dialogTitle ?: preference.title
             }
             val input = TextInputEditText(requireContext())
