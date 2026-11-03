@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.util.TypedValue
 import android.view.View
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
 /**
@@ -21,9 +22,12 @@ import androidx.recyclerview.widget.RecyclerView
  * (which also keeps SwitchPreferenceCompat on its working code path); only
  * the category header layout is swapped via themes.xml.
  *
- * Header detection uses only public API: androidx.preference returns the
- * inflated layout resource ID as the RecyclerView view type, and every
- * category row inflates our custom layout, so that ID marks headers.
+ * Header detection uses no adapter internals at all: the library inflates
+ * every category row as a bare TextView root (and our custom header layout
+ * is one too), while every real preference row is a ViewGroup — so
+ * "root is a TextView" IS the header marker. This replaces the earlier
+ * getItemViewType approach, whose return semantics in 1.2.1 were never
+ * verified against source.
  */
 class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration() {
 
@@ -34,8 +38,6 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
     private val cornerRadius = 28f * density   // M3 extra-large corner
     private val labelBottomGap = dp(8)         // category label -> its card
     private val groupTopGap = dp(12)           // card -> next category label
-
-    private val headerViewType = R.layout.preference_category_app
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         val tv = TypedValue()
@@ -49,16 +51,26 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
     /** Adapter positions [start..end] of the rows of one category group. */
     private data class Group(val start: Int, val end: Int)
 
-    private fun isHeader(adapter: RecyclerView.Adapter<*>, pos: Int): Boolean =
-        pos >= 0 && pos < adapter.itemCount &&
-            adapter.getItemViewType(pos) == headerViewType
+    /** Attached children by adapter position. */
+    private fun attachedChildren(parent: RecyclerView): Map<Int, View> {
+        val out = HashMap<Int, View>()
+        for (i in 0 until parent.childCount) {
+            val child = parent.getChildAt(i)
+            val pos = parent.getChildAdapterPosition(child)
+            if (pos != RecyclerView.NO_POSITION) out[pos] = child
+        }
+        return out
+    }
 
-    private fun adapterGroups(parent: RecyclerView): List<Group> {
-        val adapter = parent.adapter ?: return emptyList()
+    private fun adapterGroups(children: Map<Int, View>): List<Group> {
+        if (children.isEmpty()) return emptyList()
         val out = ArrayList<Group>()
         var open = -1
-        for (i in 0 until adapter.itemCount) {
-            if (isHeader(adapter, i)) {
+        val lastPos = children.keys.max()
+        for (i in 0..lastPos) {
+            val child = children[i] ?: continue
+            if (child is TextView) {
+                // Header row: bare TextView root. Closes the previous group.
                 if (open >= 0) {
                     out.add(Group(open, i - 1))
                     open = -1
@@ -67,7 +79,7 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
                 open = i
             }
         }
-        if (open >= 0) out.add(Group(open, adapter.itemCount - 1))
+        if (open >= 0) out.add(Group(open, lastPos))
         return out
     }
 
@@ -75,20 +87,15 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
         super.onDraw(c, parent, state)
         // Draw for attached children only; a partially scrolled group gets
         // its card clipped at the recycler edge, like the real Settings app.
-        val childByPos = HashMap<Int, View>()
-        for (i in 0 until parent.childCount) {
-            val child = parent.getChildAt(i)
-            val pos = parent.getChildAdapterPosition(child)
-            if (pos != RecyclerView.NO_POSITION) childByPos[pos] = child
-        }
-        if (childByPos.isEmpty()) return
+        val children = attachedChildren(parent)
+        if (children.isEmpty()) return
         val left = (parent.paddingLeft + cardMargin).toFloat()
         val right = (parent.width - parent.paddingRight - cardMargin).toFloat()
-        for (g in adapterGroups(parent)) {
+        for (g in adapterGroups(children)) {
             var top = Int.MAX_VALUE
             var bottom = Int.MIN_VALUE
             for (p in g.start..g.end) {
-                childByPos[p]?.let {
+                children[p]?.let {
                     if (it.top < top) top = it.top
                     if (it.bottom > bottom) bottom = it.bottom
                 }
@@ -107,20 +114,15 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
         parent: RecyclerView,
         state: RecyclerView.State
     ) {
-        val adapter = parent.adapter ?: return
-        val pos = parent.getChildAdapterPosition(view)
-        if (pos == RecyclerView.NO_POSITION) return
         outRect.left = cardMargin
         outRect.right = cardMargin
-        if (isHeader(adapter, pos)) {
-            outRect.top = if (pos == 0) dp(4) else groupTopGap
+        if (view is TextView) {
+            // Header: gap above (small at list top, normal between groups)
+            // and breathing room between label and its card below.
+            outRect.top = if (parent.getChildAdapterPosition(view) == 0) dp(4) else groupTopGap
             outRect.bottom = labelBottomGap
-        } else {
-            // Gap between a label and the first row comes from the label's
-            // own bottom offset; rows inside a group stack with no gap.
-            val lastOfGroup = pos == adapter.itemCount - 1 ||
-                isHeader(adapter, pos + 1)
-            outRect.bottom = if (lastOfGroup) dp(8) else 0
         }
+        // Rows inside a group stack with no extra offset; the gap to the
+        // next group comes from that group's own header top offset.
     }
 }
