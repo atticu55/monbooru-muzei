@@ -5,12 +5,15 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
@@ -57,6 +60,24 @@ class SettingsActivity : AppCompatActivity() {
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.preferences, rootKey)
+
+            // Edge-to-edge (enforced on Android 15 / targetSdk 35): pad the
+            // preference list for the status and navigation bars so it never
+            // renders underneath them.
+            view?.let { root ->
+                ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+                    val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                    (v as? ViewGroup)?.apply {
+                        setPadding(
+                            paddingLeft + bars.left,
+                            paddingTop + bars.top,
+                            paddingRight + bars.right,
+                            paddingBottom + bars.bottom
+                        )
+                    }
+                    insets
+                }
+            }
 
             findPreference<EditTextPreference>(WallpaperWorker.PREF_SERVER_URL)?.apply {
                 setOnBindEditTextListener { it.inputType = InputType.TYPE_TEXT_VARIATION_URI }
