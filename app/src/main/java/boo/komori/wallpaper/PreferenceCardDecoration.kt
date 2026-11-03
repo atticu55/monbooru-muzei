@@ -39,13 +39,19 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
     private val labelBottomGap = dp(8)         // category label -> its card
     private val groupTopGap = dp(12)           // card -> next category label
 
+    // v1.9.2: explicit day/night colors (values/ + values-night/) instead of
+    // theme attributes — the container ladder runs OPPOSITE directions in
+    // light and dark, so the attribute pair made the day page lighter than
+    // its cards. The resource picks the right variant per configuration.
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        val tv = TypedValue()
-        if (context.theme.resolveAttribute(
-                com.google.android.material.R.attr.colorSurfaceContainerHigh, tv, true)
-        ) {
-            color = if (tv.resourceId != 0) context.getColor(tv.resourceId) else tv.data
-        }
+        color = context.getColor(R.color.settings_card_bg)
+    }
+
+    // v1.9.2: thin gap lines between rows INSIDE a card — a strip of the
+    // page color across the card at each row seam reads as a transparent
+    // cut through the card (Pixel Settings look).
+    private val gapPaint = Paint().apply {
+        color = context.getColor(R.color.settings_page_bg)
     }
 
     /** Adapter positions [start..end] of the rows of one category group. */
@@ -105,6 +111,19 @@ class PreferenceCardDecoration(context: Context) : RecyclerView.ItemDecoration()
                 RectF(left, top.toFloat(), right, bottom.toFloat()),
                 cornerRadius, cornerRadius, bgPaint
             )
+            // v1.9.2: 2dp strip of page color at each seam between
+            // consecutive rows of this group — only when both neighbors are
+            // attached (a seam at the recycler edge scrolls out cleanly).
+            for (p in g.start until g.end) {
+                val above = children[p]
+                val below = children[p + 1]
+                if (above != null && below != null) {
+                    val seam = (above.bottom + below.top) / 2f
+                    c.drawRect(
+                        left, seam - dp(1), right, seam + dp(1), gapPaint
+                    )
+                }
+            }
         }
     }
 

@@ -1,0 +1,15 @@
+monbooru-muzei 1.9.2 (versionCode 12)
+
+Changes vs 1.9.1:
+- Settings page is now darker than the group cards in BOTH
+  light and dark mode. (Previously day mode was inverted:
+  the cards sat darker than the page, backwards from the
+  Pixel Settings look. Dark mode already looked right.)
+- Switches are now Material 3 fat-pill switches with a
+  thumb icon: a check mark when on, an X when off.
+  (Were the old thin AppCompat switches.)
+- A thin gap line now separates the rows inside each
+  group card, like the Pixel settings screenshot.
+
+Theme: follows your system's day/night setting — including
+sunrise/sunset schedules. No in-app override.

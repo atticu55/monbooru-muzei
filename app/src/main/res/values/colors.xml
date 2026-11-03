@@ -1,3 +1,14 @@
 <resources>
     <color name="ic_launcher_background">#14121C</color>
+
+    <!-- v1.9.2: explicit day/night settings colors so the page is DARKER
+         than the group cards in BOTH modes (previously day mode was
+         inverted: page surfaceContainerLow sat under darker
+         surfaceContainerHigh cards). Hexes pulled from the Material
+         1.12.0 AAR (m3_sys_color_* -> m3_ref_palette_*):
+         day page  = light surface_container_high #ece6f0
+         day card  = light surface_container_lowest #ffffff
+         (still light enough for dark status-bar icons) -->
+    <color name="settings_page_bg">#FFECE6F0</color>
+    <color name="settings_card_bg">#FFFFFFFF</color>
 </resources>

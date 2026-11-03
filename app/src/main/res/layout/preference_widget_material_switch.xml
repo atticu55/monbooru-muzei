@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.9.2: the switch widget inside a SwitchPreferenceCompat row, swapped
+     from the library's bare SwitchCompat (preference_widget_switch_compat)
+     to a MaterialSwitch — the M3 fat-pill switch. The attribute set is a
+     copy of the library's layout (id switchWidget, wrap_content, not
+     focusable/clickable, no background) so the preference row's existing
+     binding code (findViewById + SwitchCompat cast) keeps working unchanged.
+     The style pins thumbIcon to the check/X state list; the parent style's
+     thumbIconTint (mtrl_switch_thumb_icon_tint) colors the glyph. -->
+<com.google.android.material.materialswitch.MaterialSwitch
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Material3.CompoundButton.MaterialSwitch.App"
+    android:id="@+id/switchWidget"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:focusable="false"
+    android:clickable="false"
+    android:background="@null"/>

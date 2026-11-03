@@ -1,13 +1,16 @@
 <resources>
-    <!-- v1.9: page background = M3 surface container low; the group cards
-         drawn by PreferenceCardDecoration sit on top in surface container
-         high. Together that is the Pixel Settings container-on-page look. -->
+    <!-- v1.9.2: page background is an explicit day/night color pair
+         (@color/settings_page_bg) so the page is darker than the group cards
+         in BOTH modes — the old ?attr/colorSurfaceContainerLow sat under
+         DARKER cards in day mode (the container ladder runs opposite
+         directions in light and dark). -->
     <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:windowBackground">?attr/colorSurfaceContainerLow</item>
+        <item name="android:windowBackground">@color/settings_page_bg</item>
         <item name="preferenceTheme">@style/PreferenceThemeOverlay.App</item>
     </style>
 
-    <!-- v1.9: stock preference overlay with ONLY the category layout swapped.
+    <!-- v1.9: stock preference overlay with the category layout swapped, and
+         v1.9.2: the switch widget swapped to a MaterialSwitch (M3 fat pill).
 
          The v1.8 mistake, for the record: switchPreferenceCompatStyle was
          pointed at Widget.Material3.CompoundButton.MaterialSwitch.Compact,
@@ -16,10 +19,31 @@
          layout path — no switch frame (switch gone) and no text appearance
          (22.1sp titles). androidx.preference 1.2.1 (latest release, checked
          against Google Maven 2026-11-03) contains NO Material3 preference
-         styles at all, so the M3 look comes from the card decoration and the
-         category layout — never from overriding preference widget styles. -->
+         styles at all, so the M3 look comes from the card decoration, the
+         category layout and the widget layout — never from a bare-MDC parent
+         on a preference style. -->
     <style name="PreferenceThemeOverlay.App" parent="PreferenceThemeOverlay">
         <item name="preferenceCategoryStyle">@style/Preference.Category.App</item>
+        <item name="switchPreferenceCompatStyle">@style/Preference.SwitchPreferenceCompat.App</item>
+    </style>
+
+    <!-- v1.9.2: ONLY the widgetLayout differs from the library's own Material
+         switch preference style (the exact parent is mandatory — a bare MDC
+         widget style here silently kills the switch and the row text). The
+         swapped layout roots the widget in a MaterialSwitch; the fat pill and
+         the check/X thumb icon live in that layout's style. -->
+    <style name="Preference.SwitchPreferenceCompat.App" parent="Preference.SwitchPreferenceCompat.Material">
+        <item name="android:widgetLayout">@layout/preference_widget_material_switch</item>
+    </style>
+
+    <!-- v1.9.2: the M3 MaterialSwitch style plus the thumb icon state list
+         (check when on, X when off). Only thumbIcon is added; thumbIconTint
+         and every other item (thumb/track/tints, sizes) are inherited from
+         the stock style. State mirroring works because MaterialSwitch
+         composites the icon into a plain LayerDrawable whose children track
+         view state (verified against MDC 1.12.0 source). -->
+    <style name="Widget.Material3.CompoundButton.MaterialSwitch.App" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbIcon">@drawable/switch_thumb_icon</item>
     </style>
 
     <!-- Layout-only override of the library's own Material category style

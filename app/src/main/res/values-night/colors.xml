@@ -1,0 +1,9 @@
+<resources>
+    <!-- v1.9.2 night variants (Material 1.12.0 AAR m3_sys_color_dark_*):
+         night page = dark surface_container_low #1d1b20
+         night card = dark surface_container_high #2b2930
+         — the dark ladder runs opposite the light one, so explicit
+         per-qualifier values keep "page darker than cards" true here too. -->
+    <color name="settings_page_bg">#FF1D1B20</color>
+    <color name="settings_card_bg">#FF2B2930</color>
+</resources>

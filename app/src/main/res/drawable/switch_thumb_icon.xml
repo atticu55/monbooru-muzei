@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.9.2: thumb icon for the M3 switch — check when on, X when off.
+     The glyphs are solid white masks; the switch's thumbIconTint (inherited
+     from Widget.Material3.CompoundButton.MaterialSwitch) colors them per
+     state. State mirroring works because MaterialSwitch composites the icon
+     into a plain LayerDrawable (DrawableUtils.compositeTwoLayeredDrawable,
+     verified against MDC 1.12.0) and LayerDrawable propagates view state to
+     child drawables. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:drawable="@drawable/ic_switch_check"/>
+    <item android:drawable="@drawable/ic_switch_close"/>
+</selector>
