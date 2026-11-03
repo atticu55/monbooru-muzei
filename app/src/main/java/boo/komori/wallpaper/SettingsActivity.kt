@@ -2,9 +2,12 @@ package boo.komori.wallpaper
 
 import android.app.Dialog
 import android.content.SharedPreferences
+import android.graphics.Rect
 import android.os.Bundle
 import android.text.InputType
+import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -37,6 +40,10 @@ class SettingsActivity : AppCompatActivity() {
 
     class SettingsFragment : PreferenceFragmentCompat() {
 
+        // Base list padding captured before the first insets pass, so
+        // re-dispatches (IME showing/hiding) can't stack padding on.
+        private var basePadding: Rect? = null
+
         private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
             when (key) {
                 WallpaperWorker.PREF_API_TOKEN -> {
@@ -60,23 +67,9 @@ class SettingsActivity : AppCompatActivity() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.preferences, rootKey)
 
-            // Edge-to-edge (enforced on Android 15 / targetSdk 35): pad the
-            // preference list for the status and navigation bars so it never
-            // renders underneath them.
-            view?.let { root ->
-                ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-                    val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                    (v as? ViewGroup)?.apply {
-                        setPadding(
-                            paddingLeft + bars.left,
-                            paddingTop + bars.top,
-                            paddingRight + bars.right,
-                            paddingBottom + bars.bottom
-                        )
-                    }
-                    insets
-                }
-            }
+            // Edge-to-edge insets are attached in onViewCreated (v1.8 did
+            // it here, where `view` is always null, so it never attached and
+            // the list drew under the status bar).
 
             findPreference<EditTextPreference>(WallpaperWorker.PREF_SERVER_URL)?.apply {
                 setOnBindEditTextListener { it.inputType = InputType.TYPE_TEXT_VARIATION_URI }
@@ -95,10 +88,6 @@ class SettingsActivity : AppCompatActivity() {
                 ) {
                     text = MASKED_TOKEN
                 }
-            }
-
-            findPreference<EditTextPreference>(WallpaperWorker.PREF_COLLECTION)?.apply {
-                setOnBindEditTextListener { it.inputType = InputType.TYPE_CLASS_TEXT }
             }
 
             findPreference<Preference>("syncStatus")?.apply {
@@ -202,6 +191,30 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            // v1.9: one rounded M3 card behind each category group (Pixel
+            // Settings look) — see PreferenceCardDecoration.
+            listView.addItemDecoration(PreferenceCardDecoration(requireContext()))
+            // Edge-to-edge (enforced on Android 15 / targetSdk 35): pad the
+            // preference list for the status and navigation bars so it never
+            // renders underneath them.
+            ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                if (basePadding == null) {
+                    basePadding = Rect(v.paddingLeft, v.paddingTop, v.paddingRight, v.paddingBottom)
+                }
+                val b = basePadding!!
+                (v as? ViewGroup)?.setPadding(
+                    b.left + bars.left,
+                    b.top + bars.top,
+                    b.right + bars.right,
+                    b.bottom + bars.bottom
+                )
+                insets
+            }
+        }
+
         // Polls the sync status once a second while settings is on screen,
         // so "Syncing…" flips to the result without leaving the screen.
         private val statusTick = object : Runnable {
@@ -257,20 +270,35 @@ class SettingsActivity : AppCompatActivity() {
                 .setTitle(preference.dialogTitle ?: preference.title)
                 .setNegativeButton("Cancel", null)
 
-            // Build the text field programmatically: the M3 outlined box
-            // style is a theme attribute, so a programmatic TextInputLayout
-            // picks it up from the dialog's Material theme without needing a
-            // layout resource.
-            val inputLayout = TextInputLayout(requireContext())
+            // Build the text field programmatically, inside a padded
+            // container: MaterialAlertDialogBuilder adds no padding around a
+            // custom view (measured in v1.8: the field ran edge to edge).
+            // 24dp sides is the M3 dialog content spacing.
+            val dp = resources.displayMetrics.density
+            val container = FrameLayout(requireContext()).apply {
+                setPadding(
+                    (24 * dp).toInt(), (8 * dp).toInt(),
+                    (24 * dp).toInt(), (16 * dp).toInt()
+                )
+            }
+            val inputLayout = TextInputLayout(requireContext()).apply {
+                // Deterministic outlined box: the theme's default
+                // textInputStyle is not involved at all (v1.8 measurement
+                // showed runtime resolution diverging from expectations).
+                boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINED
+                hint = preference.dialogTitle ?: preference.title
+            }
             val input = TextInputEditText(requireContext())
-            // Single line for URL/collection; the token field may wrap.
+            // Token stays single-line and masked, like the v1.8 dialog
+            // did; the URL is single-line URI.
             input.inputType = if (preferenceKey == WallpaperWorker.PREF_API_TOKEN) {
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             } else {
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             }
             inputLayout.addView(input)
-            builder.setView(inputLayout)
+            container.addView(inputLayout)
+            builder.setView(container)
 
             // Prefill: the token always opens empty (the stored token never
             // appears on screen); the other two show their current value.

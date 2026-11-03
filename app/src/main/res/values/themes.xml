@@ -1,30 +1,34 @@
 <resources>
+    <!-- v1.9: page background = M3 surface container low; the group cards
+         drawn by PreferenceCardDecoration sit on top in surface container
+         high. Together that is the Pixel Settings container-on-page look. -->
     <style name="Theme.App" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">?attr/colorSurfaceContainerLow</item>
         <item name="preferenceTheme">@style/PreferenceThemeOverlay.App</item>
     </style>
 
+    <!-- v1.9: stock preference overlay with ONLY the category layout swapped.
+
+         The v1.8 mistake, for the record: switchPreferenceCompatStyle was
+         pointed at Widget.Material3.CompoundButton.MaterialSwitch.Compact,
+         which is a bare MDC widget style, not a preference style. It carries
+         no android:layout, so the switch row fell off the Material preference
+         layout path — no switch frame (switch gone) and no text appearance
+         (22.1sp titles). androidx.preference 1.2.1 (latest release, checked
+         against Google Maven 2026-11-03) contains NO Material3 preference
+         styles at all, so the M3 look comes from the card decoration and the
+         category layout — never from overriding preference widget styles. -->
     <style name="PreferenceThemeOverlay.App" parent="PreferenceThemeOverlay">
-        <item name="switchPreferenceCompatStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch.Compact</item>
         <item name="preferenceCategoryStyle">@style/Preference.Category.App</item>
     </style>
 
-    <!-- v1.8: M3 section headers — small, colored, medium weight, like Pixel
-         Settings. Preference.Category.Material's title is textAppearanceSmall
-         in the fallback accent color; this tightens it to a label. -->
+    <!-- Layout-only override of the library's own Material category style
+         (the exact parent v1.8 built and rendered with — only the layout
+         item differs). The stock category layout is a bare TextView bound
+         to listSeparatorTextViewStyle and never reads text styling from
+         this style, so all appearance lives in the layout itself
+         (res/layout/preference_category_app.xml). -->
     <style name="Preference.Category.App" parent="Preference.Category.Material">
-        <item name="android:textColor">?attr/colorPrimary</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.02</item>
-    </style>
-
-    <!-- v1.8: the stock MaterialSwitch sets android:minHeight to
-         ?attr/minTouchTargetSize (48dp), which inflates the preference row
-         (the row itself is only ~48dp tall) and makes the bottom section
-         look oversized. Tighten the touch target back to the compact
-         switch metrics; the row's own minHeight keeps the tap area. -->
-    <style name="Widget.Material3.CompoundButton.MaterialSwitch.Compact" parent="Widget.Material3.CompoundButton.MaterialSwitch">
-        <item name="android:minHeight">32dp</item>
-        <item name="android:minWidth">36dp</item>
+        <item name="android:layout">@layout/preference_category_app</item>
     </style>
 </resources>

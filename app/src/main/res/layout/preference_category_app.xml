@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.9: category header as an M3 section label above a card group
+     (Pixel Settings look). Copied from the library's own approach: the
+     category layout IS the styling unit (the preference style's text
+     attributes never reach an inflated layout that does not reference
+     them — that is why the v1.8 header styling never rendered).
+
+     Left/right spacing comes from PreferenceCardDecoration's offsets; this
+     layout only adds the 16dp text inset so the label aligns with the
+     first row's text inside the card. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:textSize="14sp"
+    android:fontFamily="sans-serif-medium"
+    android:textColor="?attr/colorOnSurfaceVariant"
+    android:letterSpacing="0.01"
+    android:maxLines="2"
+    android:ellipsize="end" />

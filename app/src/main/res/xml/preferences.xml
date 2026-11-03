@@ -38,13 +38,6 @@
             app:title="Choose collection"
             app:summary="Pick from the server's list"
             app:iconSpaceReserved="false" />
-
-        <EditTextPreference
-            app:key="collection"
-            app:title="Collection name (manual)"
-            app:useSimpleSummaryProvider="true"
-            app:iconSpaceReserved="false"
-            app:dialogTitle="Collection name" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Refresh conditions" app:iconSpaceReserved="false">

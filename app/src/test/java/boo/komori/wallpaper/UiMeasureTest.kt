@@ -52,7 +52,10 @@ class UiMeasureTest {
         fun setToken(context: Context, token: String?) {}
     }
 
-    private val outDir = File("app/build/ui-shots").apply { mkdirs() }
+    // Gradle runs unit tests with the module dir as cwd, so "build/ui-shots"
+    // lands in app/build/ui-shots on the host (v1.8's "app/build/..." path
+    // landed in app/app/build/...).
+    private val outDir = File("build/ui-shots").apply { mkdirs() }
 
     // ---- helpers -------------------------------------------------------
 
@@ -117,7 +120,7 @@ class UiMeasureTest {
             sb.appendLine("$pad  SWITCH track=${track?.javaClass?.simpleName} thumb=${thumb?.javaClass?.simpleName}")
         }
         if (v is TextInputLayout) {
-            sb.appendLine("$pad  TEXTINPUT boxBackgroundMode=${v.boxBackgroundMode} boxStrokeWidthPx=${v.boxStrokeWidth}")
+            sb.appendLine("$pad  TEXTINPUT boxBackgroundMode=${v.boxBackgroundMode} boxStrokeWidthPx=${v.boxStrokeWidth} hint=${v.hint}")
         }
         if (v is ViewGroup) {
             for (i in 0 until v.childCount) dumpTree(v.getChildAt(i), depth + 1, activity, sb)
@@ -150,7 +153,7 @@ class UiMeasureTest {
     @Config(
         sdk = [35],
         shadows = [UiMeasureTest.ShadowTokenStore::class],
-        qualifiers = "w411dp-h891dp-420dpi-night"
+        qualifiers = "w411dp-h891dp-night-420dpi"
     )
     fun dumpNight() {
         val sb = StringBuilder()
@@ -173,8 +176,7 @@ class UiMeasureTest {
 
         for ((key, png) in listOf(
             WallpaperWorker.PREF_SERVER_URL to "dialog-url.png",
-            WallpaperWorker.PREF_API_TOKEN to "dialog-token.png",
-            WallpaperWorker.PREF_COLLECTION to "dialog-collection.png"
+            WallpaperWorker.PREF_API_TOKEN to "dialog-token.png"
         )) {
             SettingsActivity.MaterialEditTextDialogFragment.show(frag, key)
             shadowOf(Looper.getMainLooper()).idle()
